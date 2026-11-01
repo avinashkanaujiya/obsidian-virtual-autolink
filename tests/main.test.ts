@@ -8,7 +8,7 @@ import LinkerPlugin, {
     registerInitialMetadataCacheRefresh,
     VIRTUAL_LINK_HOVER_DELAY_MS,
 } from 'main';
-import { TFile } from 'obsidian';
+import { App, PluginManifest, TFile } from 'obsidian';
 import { LinkerCache } from '../linker/linkerCache';
 
 const BASE_SETTINGS: LinkerPluginSettings = {
@@ -84,6 +84,66 @@ function makeHoverTarget(root: { closest: (selector: string) => unknown }) {
         closest: (selector: string) => selector === '.virtual-link-span' ? root : null,
     };
 }
+
+describe('highlight sidebar navigation', () => {
+    it('collects highlights without revealing the sidebar, including on revisits', async () => {
+        const plugin = new LinkerPlugin({} as App, {} as PluginManifest);
+        const events = new Map<string, (file: TFile) => void>();
+        const commands = new Map<string, { callback?: () => Promise<void> }>();
+        let sidebarVisible = false;
+        const leaf = {
+            setViewState: async () => { sidebarVisible = true; },
+        };
+        const workspace = {
+            on: (name: string, callback: (file: TFile) => void) => {
+                events.set(name, callback);
+            },
+            getLeavesOfType: () => [leaf],
+            getRightLeaf: () => leaf,
+            revealLeaf: () => { sidebarVisible = true; },
+            getActiveViewOfType: () => null,
+        };
+        Object.assign(plugin, {
+            app: {
+                workspace,
+                vault: { on: () => undefined },
+                metadataCache: { on: () => undefined },
+            },
+            loadSettings: async () => { plugin.settings = { ...BASE_SETTINGS }; },
+            registerMarkdownPostProcessor: () => undefined,
+            registerEditorExtension: () => undefined,
+            registerView: () => undefined,
+            addSettingTab: () => undefined,
+            registerEvent: () => undefined,
+            registerDomEvent: () => undefined,
+            addCommand: (command: { id: string; callback?: () => Promise<void> }) => {
+                commands.set(command.id, command);
+            },
+            attemptScroll: () => undefined,
+        });
+
+        plugin.onload();
+        await Promise.resolve();
+        const openFile = events.get('file-open');
+        if (!openFile) throw new Error('file-open handler was not registered');
+        for (const path of ['Notes/First.md', 'Notes/Second.md']) {
+            plugin.highlightService.setPending(path, 'candidate');
+            openFile(makeFile(path));
+        }
+        expect(plugin.highlightService.getAllActive().map(entry => entry.filePath).sort())
+            .toEqual(['Notes/First.md', 'Notes/Second.md']);
+        expect(sidebarVisible).toBe(false);
+
+        const openHighlights = commands.get('open-highlights')?.callback;
+        if (!openHighlights) throw new Error('Open highlights command was not registered');
+        await openHighlights();
+        expect(sidebarVisible).toBe(true);
+        sidebarVisible = false; // User switches away from the panel.
+        openFile(makeFile('Notes/First.md'));
+        expect(sidebarVisible).toBe(false);
+        plugin.onunload();
+    });
+});
 
 describe('buildRelativeVaultPath', () => {
     it('returns the target basename for files in the same folder', () => {

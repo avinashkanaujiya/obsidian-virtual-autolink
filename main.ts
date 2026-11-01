@@ -494,10 +494,6 @@ export default class LinkerPlugin extends Plugin {
                 // Trigger a CM6 re-render so live-preview gets the decorations.
                 this.updateManager.update();
 
-                // Open / reveal the sidebar panel so the user can jump to any
-                // occurrence even when the automatic scroll misses on long notes.
-                this.revealHighlightSidebar();
-
                 // Apply marks to already-rendered reading-mode DOM (for notes
                 // that were already open in another leaf when the link was clicked).
                 // For freshly opened notes the reading-mode post-processor handles
@@ -586,6 +582,12 @@ export default class LinkerPlugin extends Plugin {
             (eventRef) => this.registerEvent(eventRef),
             () => this.scheduleCacheRefresh(),
         );
+
+        this.addCommand({
+            id: 'open-highlights',
+            name: 'Open highlights',
+            callback: () => this.revealHighlightSidebar(),
+        });
 
         this.addCommand({
             id: 'activate-virtual-linker',

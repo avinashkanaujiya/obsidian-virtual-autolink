@@ -128,6 +128,11 @@ To apply custom styling to the links, you can add a CSS-snippet at `VaultFolder/
 > [!Note]
 > If you want to apply custom styling, don't forget to turn off the "Apply default link styling" in the settings.
 
+### Highlights panel
+
+Clicking candidate links collects highlights for the opened notes without opening, selecting, or focusing the Highlights panel. Returning to an already-highlighted note also leaves the sidebar unchanged. To open the panel intentionally, run **Virtual Autolink: Open highlights** from the command palette or select its existing sidebar tab. The panel shows highlights for notes that are still open; closing a note removes its highlights from the list.
+
+
 ## Commands
 
 The plugin provides the following commands that you can use:
@@ -135,6 +140,7 @@ The plugin provides the following commands that you can use:
 - **Convert All Virtual Links in Selection to Real Links**: Converts all virtual links within the selected text to real links.
 - **Activate Virtual Linker**: Activates Virtual Autolink if it is currently deactivated.
 - **Deactivate Virtual Linker**: Deactivates Virtual Autolink if it is currently activated.
+- **Open highlights**: Opens the Highlights panel intentionally; candidate-link navigation never opens or focuses it automatically.
 
 You can access these commands from the command palette or assign custom hotkeys to them in the settings.
 
