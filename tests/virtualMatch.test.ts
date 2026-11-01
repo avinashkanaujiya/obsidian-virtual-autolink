@@ -127,6 +127,7 @@ function createMockDocument() {
             nodeType: 3,
             textContent: text,
         }),
+        adoptNode: <T>(node: T): T => node,
     };
 }
 

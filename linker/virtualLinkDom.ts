@@ -41,7 +41,7 @@ export class VirtualMatch {
     }
 
     getLinkAnchorElement(linkText: string, href: string, highlightText: string | null = null, ownerDoc: Document = document) {
-        const link = ownerDoc.createElement('a');
+        const link = ownerDoc.adoptNode(createEl('a'));
         link.href = href;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
@@ -60,7 +60,7 @@ export class VirtualMatch {
             link.appendChild(ownerDoc.createTextNode(linkText.slice(0, highlightMatch.index)));
         }
 
-        const mark = ownerDoc.createElement('span');
+        const mark = ownerDoc.adoptNode(createSpan());
         mark.classList.add('virtual-autolink-highlight');
         mark.textContent = highlightMatch.matchText;
         link.appendChild(mark);
@@ -74,7 +74,7 @@ export class VirtualMatch {
     }
 
     getOpenAllAnchorElement(ownerDoc: Document = document) {
-        const link = ownerDoc.createElement('a');
+        const link = ownerDoc.adoptNode(createEl('a'));
         const firstPath = this.files[0]?.path ?? '';
         link.href = firstPath;
         link.target = '_blank';
@@ -88,7 +88,7 @@ export class VirtualMatch {
     }
 
     getLinkRootSpan(extraClasses: string[] = [], ownerDoc: Document = document) {
-        const span = ownerDoc.createElement('span');
+        const span = ownerDoc.adoptNode(createSpan());
         span.classList.add('glossary-entry', 'virtual-link', 'virtual-link-span');
         if (extraClasses.length > 0) {
             span.classList.add(...extraClasses);
@@ -100,7 +100,7 @@ export class VirtualMatch {
     }
 
     getMultipleReferencesSpan(ownerDoc: Document = document) {
-        const spanReferences = ownerDoc.createElement('span');
+        const spanReferences = ownerDoc.adoptNode(createSpan());
         if (!this.settings.alwaysShowMultipleReferences) {
             spanReferences.classList.add('multiple-files-references');
         }
@@ -110,7 +110,7 @@ export class VirtualMatch {
             items.push(this.getLinkAnchorElement(` ${index + 1} `, file.path, null, ownerDoc));
         });
 
-        const openingBracket = ownerDoc.createElement('span');
+        const openingBracket = ownerDoc.adoptNode(createSpan());
         openingBracket.textContent = this.isSubWord ? '[' : ' [';
         spanReferences.appendChild(openingBracket);
 
@@ -121,7 +121,7 @@ export class VirtualMatch {
             }
         });
 
-        const closingBracket = ownerDoc.createElement('span');
+        const closingBracket = ownerDoc.adoptNode(createSpan());
         closingBracket.textContent = ']';
         spanReferences.appendChild(closingBracket);
 
@@ -131,7 +131,7 @@ export class VirtualMatch {
     getIconSpan(ownerDoc: Document = document) {
         const suffix = this.isAlias ? this.settings.virtualLinkAliasSuffix : this.settings.virtualLinkSuffix;
         if ((suffix?.length ?? 0) > 0) {
-            const icon = ownerDoc.createElement('sup');
+            const icon = ownerDoc.adoptNode(createEl('sup'));
             icon.textContent = suffix;
             icon.classList.add('linker-suffix-icon');
             return icon;

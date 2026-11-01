@@ -46,6 +46,8 @@ If you only want to include notes of a specific folder, you can define this fold
 
 ## Settings
 
+On Obsidian 1.13 or later, Virtual Autolink settings appear in Obsidian's settings search. Older supported versions retain the plugin's settings tab. Advanced and conditional settings keep their existing visibility rules.
+
 ## Matched files
 
 You can toggle the matching of files between:

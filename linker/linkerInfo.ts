@@ -1,5 +1,5 @@
 import { LinkerPluginSettings } from 'main';
-import { App, getAllTags, TAbstractFile, TFile } from 'obsidian';
+import { App, getAllTags, TFile } from 'obsidian';
 
 export function normalizeDirectorySetting(directorySetting: string): string {
     return directorySetting.trim().replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
@@ -47,14 +47,9 @@ export class LinkerFileMetaInfo {
 
     includeAllFiles: boolean;
 
-    constructor(public fetcher: LinkerMetaInfoFetcher, file: TFile | TAbstractFile) {
+    constructor(public fetcher: LinkerMetaInfoFetcher, file: TFile) {
         this.fetcher = fetcher;
-        const resolvedFile = file instanceof TFile ? file : this.fetcher.app.vault.getFileByPath(file.path);
-        if (!resolvedFile) {
-            console.warn(`[Virtual Autolink] Could not resolve file at path: ${file.path}`);
-        }
-        // ponytail: keep original cast semantics but guard null; getFileCache handles null
-        this.file = (resolvedFile ?? file) as TFile;
+        this.file = file;
 
         const settings = this.fetcher.settings;
 
@@ -88,7 +83,7 @@ export class LinkerMetaInfoFetcher {
         this.excludeDirPattern = buildDirectoryPattern(this.settings.excludedDirectories);
     }
 
-    getMetaInfo(file: TFile | TAbstractFile) {
+    getMetaInfo(file: TFile) {
         return new LinkerFileMetaInfo(this, file);
     }
 }

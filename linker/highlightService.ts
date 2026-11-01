@@ -239,7 +239,7 @@ export function applyHighlightToDOM(
 
         const mappedStart = sourceMapper?.locate(text) ?? null;
         const fallbackHighlightedRenderedLines = new Set<number>();
-        const frag = ownerDoc.createDocumentFragment();
+        const frag = ownerDoc.adoptNode(createFragment());
         let replaced = false;
         let lastIndex = 0;
         let match: RegExpExecArray | null;
@@ -271,13 +271,11 @@ export function applyHighlightToDOM(
                 frag.appendChild(ownerDoc.createTextNode(text.slice(lastIndex, match.index)));
             }
 
-            const mark = ownerDoc.createElement('mark');
-            mark.className = 'virtual-autolink-highlight';
+            const mark = frag.createEl('mark', { cls: 'virtual-autolink-highlight' });
             if (sourceLine !== null) {
                 mark.dataset.virtualAutolinkSourceLine = String(sourceLine);
             }
             mark.textContent = match[0];
-            frag.appendChild(mark);
             if (!firstMark) firstMark = mark;
 
             lastIndex = match.index + match[0].length;

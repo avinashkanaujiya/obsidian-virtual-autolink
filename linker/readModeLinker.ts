@@ -53,7 +53,7 @@ export class GlossaryLinker extends MarkdownRenderChild {
         if (this.settings.excludeLinksToRealLinkedFiles) {
             const realLinks = this.containerEl.querySelectorAll('a.internal-link[href]');
             realLinks.forEach((link) => {
-                if (!(link instanceof HTMLAnchorElement)) {
+                if (!link?.instanceOf(HTMLAnchorElement)) {
                     return;
                 }
 

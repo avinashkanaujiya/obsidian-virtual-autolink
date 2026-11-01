@@ -40,7 +40,7 @@ function makeHighlightView(params: {
     view.contentEl = {
         empty: jest.fn(),
         createDiv: jest.fn(() => ({
-            createEl: jest.fn(() => ({ setText: jest.fn() })),
+            createDiv: jest.fn(() => ({ setText: jest.fn() })),
             setText: jest.fn(),
         })),
         createEl: jest.fn(() => ({ setText: jest.fn() })),
@@ -257,6 +257,9 @@ describe('HighlightView.navigateTo', () => {
 
     class FakeHTMLElement {
         scrollIntoView = jest.fn();
+        instanceOf<T>(type: { new (): T }): this is T {
+            return this instanceof type;
+        }
     }
 
     beforeAll(() => {
@@ -353,5 +356,70 @@ describe('HighlightView.navigateTo', () => {
 
         expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
         expect(view.setEphemeralState).not.toHaveBeenCalled();
+    });
+});
+
+function makeBoundaryHighlightView() {
+    const instance = new HighlightView(
+        {} as unknown as ConstructorParameters<typeof HighlightView>[0],
+        new HighlightService(),
+        {} as unknown as ConstructorParameters<typeof HighlightView>[2],
+        { update: jest.fn() } as unknown as ConstructorParameters<typeof HighlightView>[3],
+    );
+    return instance as unknown as {
+        findRenderedPreviewOccurrence(view: MarkdownView, occurrence: { line: number; index: number }): HTMLElement | null;
+        queuePreviewOccurrenceScroll(view: MarkdownView, occurrence: {
+            line: number;
+            index: number;
+            ch: number;
+            matchText: string;
+            rawLine: string;
+        }): void;
+    };
+}
+
+describe('HighlightView DOM boundaries', () => {
+    it('accepts rendered marks from another window', () => {
+        const highlightView = makeBoundaryHighlightView();
+        const HTMLElementConstructor = globalThis.HTMLElement;
+        const target = {
+            instanceOf: jest.fn((type: typeof HTMLElement) => type === HTMLElementConstructor),
+        };
+        const view = {
+            contentEl: {
+                querySelector: jest.fn(() => target),
+                querySelectorAll: jest.fn(() => []),
+            },
+        };
+
+        expect(highlightView.findRenderedPreviewOccurrence(view as unknown as MarkdownView, { line: 4, index: 0 })).toBe(target);
+    });
+
+    it('does not copy malformed ephemeral state into preview navigation state', () => {
+        jest.useFakeTimers();
+        const highlightView = makeBoundaryHighlightView();
+        const view = {
+            getMode: jest.fn(() => 'preview'),
+            getEphemeralState: jest.fn(() => ['unexpected']),
+            setEphemeralState: jest.fn(),
+            contentEl: {
+                querySelector: jest.fn(() => null),
+                querySelectorAll: jest.fn(() => []),
+            },
+        };
+
+        try {
+            highlightView.queuePreviewOccurrenceScroll(view as unknown as MarkdownView, {
+                line: 7,
+                index: 0,
+                ch: 0,
+                matchText: 'x',
+                rawLine: 'x',
+            });
+
+            expect(view.setEphemeralState).toHaveBeenCalledWith({ line: 7 });
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

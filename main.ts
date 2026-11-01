@@ -1,4 +1,4 @@
-import { App, EditorPosition, EventRef, Keymap, MarkdownView, Menu, Platform, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, TFolder } from 'obsidian';
+import { App, EditorPosition, EventRef, Keymap, MarkdownView, Menu, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, TFolder } from 'obsidian';
 
 import { GlossaryLinker } from './linker/readModeLinker';
 import { liveLinkerPlugin } from './linker/liveLinker';
@@ -519,7 +519,7 @@ export default class LinkerPlugin extends Plugin {
                         view.contentEl.querySelector('.markdown-reading-view') ??
                         view.contentEl.querySelector('.markdown-preview-view');
 
-                    if (readingEl instanceof HTMLElement) {
+                    if (readingEl?.instanceOf(HTMLElement)) {
                         applyHighlightToDOM(readingEl, searchText);
                     }
                 });
@@ -578,7 +578,7 @@ export default class LinkerPlugin extends Plugin {
         );
 
         registerInitialMetadataCacheRefresh(
-            this.app.metadataCache as MetadataCacheReadyAware,
+            this.app.metadataCache,
             (eventRef) => this.registerEvent(eventRef),
             () => this.scheduleCacheRefresh(),
         );
@@ -643,7 +643,7 @@ export default class LinkerPlugin extends Plugin {
 
                 // Find all virtual links in the selection
                 const virtualLinks = Array.from(selectionRange.querySelectorAll('.virtual-link-a'))
-                    .filter((link): link is HTMLElement => link instanceof HTMLElement)
+                    .filter((link): link is HTMLElement => link.instanceOf(HTMLElement))
                     .map(link => ({
                         element: link,
                         from: parseInt(link.getAttribute('from') || '-1'),
@@ -812,13 +812,14 @@ export default class LinkerPlugin extends Plugin {
         const isDirectory = app.vault.getAbstractFileByPath(file.path) instanceof TFolder;
 
         if (!isDirectory) {
+            if (!(file instanceof TFile)) return;
             const metaInfo = fetcher.getMetaInfo(file);
 
             const contextMenuHandler = (event: MouseEvent) => {
                 // Access the element that triggered the context menu
-                const targetElement = event.target;
+                const targetElement = event.targetNode;
 
-                if (!targetElement || !(targetElement instanceof HTMLElement)) {
+                if (!targetElement?.instanceOf(HTMLElement)) {
                     console.error('No target element');
                     return;
                 }
@@ -1011,7 +1012,7 @@ export default class LinkerPlugin extends Plugin {
     private async revealHighlightSidebar(): Promise<void> {
         const existing = this.app.workspace.getLeavesOfType(HIGHLIGHT_VIEW_TYPE);
         if (existing.length > 0) {
-            this.app.workspace.revealLeaf(existing[0]);
+            await this.app.workspace.revealLeaf(existing[0]);
             return;
         }
         // getRightLeaf(false) reuses an existing right-sidebar leaf without
@@ -1019,7 +1020,7 @@ export default class LinkerPlugin extends Plugin {
         const leaf = this.app.workspace.getRightLeaf(false);
         if (leaf) {
             await leaf.setViewState({ type: HIGHLIGHT_VIEW_TYPE, active: true });
-            this.app.workspace.revealLeaf(leaf);
+            await this.app.workspace.revealLeaf(leaf);
         }
     }
 
@@ -1069,7 +1070,7 @@ export default class LinkerPlugin extends Plugin {
             // Reading mode injected <mark>
             const domMark = (view as MarkdownView).contentEl
                 .querySelector('mark.virtual-autolink-highlight');
-            if (domMark instanceof HTMLElement) {
+            if (domMark?.instanceOf(HTMLElement)) {
                 domMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
@@ -1077,7 +1078,7 @@ export default class LinkerPlugin extends Plugin {
             // Live-preview CM6 rendered <span class="virtual-autolink-highlight">
             const cmMark = (view as MarkdownView).contentEl
                 .querySelector('.cm-content .virtual-autolink-highlight');
-            if (cmMark instanceof HTMLElement) {
+            if (cmMark?.instanceOf(HTMLElement)) {
                 cmMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
@@ -1135,7 +1136,7 @@ export default class LinkerPlugin extends Plugin {
     }
 
     /** Update plugin settings. */
-    async updateSettings(settings: Partial<LinkerPluginSettings> = <Partial<LinkerPluginSettings>>{}) {
+    async updateSettings(settings: Partial<LinkerPluginSettings> = {}) {
         Object.assign(this.settings, settings);
         await this.saveData(this.settings);
         this.scheduleCacheRefresh();
@@ -1147,481 +1148,295 @@ class LinkerSettingTab extends PluginSettingTab {
         super(app, plugin);
     }
 
+    private saveSetting<K extends keyof LinkerPluginSettings>(key: K, value: LinkerPluginSettings[K]): Promise<void> {
+        return this.plugin.updateSettings({ [key]: value });
+    }
+
+    private refreshSettings(): void {
+        if (typeof this.update === 'function') {
+            this.update();
+        } else {
+            this.display();
+        }
+    }
+
+    getSettingDefinitions() {
+        const advanced = () => this.plugin.settings.advancedSettings;
+        const toggle = (
+            name: string,
+            key: keyof LinkerPluginSettings,
+            desc?: string,
+            visible: () => boolean = () => true,
+            refresh = false,
+        ) => ({
+            name,
+            desc,
+            visible,
+            render: (setting: Setting) => {
+                setting.addToggle(control =>
+                    control
+                        .setValue(this.plugin.settings[key] as boolean)
+                        .onChange(async value => {
+                            await this.saveSetting(key, value);
+                            if (refresh) this.refreshSettings();
+                        })
+                );
+            },
+        });
+        const text = (
+            name: string,
+            key: keyof LinkerPluginSettings,
+            desc?: string,
+            visible: () => boolean = () => true,
+        ) => ({
+            name,
+            desc,
+            visible,
+            render: (setting: Setting) => {
+                setting.addText(control =>
+                    control
+                        .setValue(this.plugin.settings[key] as string)
+                        .onChange(value => this.saveSetting(key, value))
+                );
+            },
+        });
+        const textArea = (
+            name: string,
+            desc: string,
+            key: 'customFrontmatterFields' | 'linkerDirectories' | 'excludedDirectories' | 'excludedDirectoriesForLinking',
+            visible: () => boolean = () => true,
+            placeholder = 'List of directory paths or names (one per line)',
+        ) => ({
+            name,
+            desc,
+            visible,
+            render: (setting: Setting) => {
+                const values = this.plugin.settings[key];
+                setting.addTextArea(control => {
+                    control
+                        .setPlaceholder(placeholder)
+                        .setValue(Array.isArray(values) ? values.join('\n') : '')
+                        .onChange(value => this.saveSetting(
+                            key,
+                            value.split('\n').map(line => line.trim()).filter(line => line.length > 0),
+                        ));
+                    control.inputEl.addClass('linker-settings-text-box');
+                });
+            },
+        });
+        const heading = (name: string) => ({
+            name,
+            desc: undefined,
+            visible: () => true,
+            render: (setting: Setting) => { setting.setHeading(); },
+        });
+
+        return [
+            toggle('Activate Virtual Linker', 'linkerActivated'),
+            toggle(
+                'Require modifier key for candidate links',
+                'requireModifierForCandidateLinks',
+                'When on, only modifier-held clicks and hovers activate virtual links. Disable to allow standalone clicks and hovers.',
+            ),
+            toggle('Show advanced settings', 'advancedSettings', undefined, () => true, true),
+            heading('Matching behavior'),
+            toggle('Include aliases', 'includeAliases', 'If activated, the virtual linker will also include aliases for the files.'),
+            textArea(
+                'Custom frontmatter fields for linking',
+                'Additional frontmatter property names (one per line) whose values are used as link candidates, independent of the aliases toggle. Use this to keep your aliases clean while still creating virtual links from dedicated fields such as `linker-terms` or `keywords`.',
+                'customFrontmatterFields',
+                undefined,
+                'e.g. linker-terms\nkeywords',
+            ),
+            toggle(
+                'Only link once',
+                'onlyLinkOnce',
+                'If activated, there will not be several identical virtual links in the same note (Wikipedia style). Repeated identical matches on the same line are always collapsed to the first occurrence to reduce clutter.',
+                advanced,
+            ),
+            toggle(
+                'Exclude links to real linked files',
+                'excludeLinksToRealLinkedFiles',
+                'If activated, there will be no links to files that are already linked in the note by real links.',
+                advanced,
+            ),
+            toggle('Include headers', 'includeHeaders', 'If activated, headers (so your lines beginning with at least one `#`) are included for virtual links.'),
+            toggle(
+                'Match any part of a word',
+                'matchAnyPartsOfWords',
+                'If deactivated, only whole words are matched. Otherwise, every part of a word is found.',
+                undefined,
+                true,
+            ),
+            toggle(
+                'Match the beginning of words',
+                'matchBeginningOfWords',
+                'If activated, the beginnings of words are also linked, even if it is not a whole match.',
+                () => !this.plugin.settings.matchAnyPartsOfWords,
+                true,
+            ),
+            toggle(
+                'Match the end of words',
+                'matchEndOfWords',
+                'If activated, the ends of words are also linked, even if it is not a whole match.',
+                () => !this.plugin.settings.matchAnyPartsOfWords,
+                true,
+            ),
+            toggle(
+                'Suppress suffix for sub words',
+                'suppressSuffixForSubWords',
+                'If activated, the suffix is not added to links for subwords, but only for complete matches.',
+                () => this.plugin.settings.matchAnyPartsOfWords || this.plugin.settings.matchBeginningOfWords,
+            ),
+            toggle(
+                'Fix IME problem',
+                'fixIMEProblem',
+                'If activated, there will be no links in the current line start which is followed immediately by the Input Method Editor (IME). This is the recommended setting if you are using IME for typing, e.g. for Chinese characters, because instant linking might interfere with IME.',
+                advanced,
+            ),
+            toggle(
+                'Avoid linking in current line',
+                'excludeLinksInCurrentLine',
+                'If activated, there will be no links in the current line.',
+                advanced,
+            ),
+            heading('Case sensitivity'),
+            toggle(
+                'Case sensitive',
+                'matchCaseSensitive',
+                'If activated, the matching is case sensitive.',
+                undefined,
+                true,
+            ),
+            {
+                name: 'Capital letter percentage for automatic match case',
+                desc: 'The percentage (0 - 100) of capital letters in a file name or alias to be automatically considered as case sensitive.',
+                visible: advanced,
+                render: (setting: Setting) => {
+                    setting.addText(control =>
+                        control
+                            .setValue((this.plugin.settings.capitalLetterProportionForAutomaticMatchCase * 100).toFixed(1))
+                            .onChange(async value => {
+                                let percentage = parseFloat(value);
+                                if (isNaN(percentage)) percentage = 75;
+                                else if (percentage < 0) percentage = 0;
+                                else if (percentage > 100) percentage = 100;
+                                await this.saveSetting('capitalLetterProportionForAutomaticMatchCase', percentage / 100);
+                            })
+                    );
+                },
+            },
+            text(
+                'Tag to ignore case',
+                'tagToIgnoreCase',
+                'By adding this tag to a file, the linker will ignore the case for the file.',
+                () => this.plugin.settings.advancedSettings && this.plugin.settings.matchCaseSensitive,
+            ),
+            text(
+                'Tag to match case',
+                'tagToMatchCase',
+                'By adding this tag to a file, the linker will match the case for the file.',
+                () => this.plugin.settings.advancedSettings && !this.plugin.settings.matchCaseSensitive,
+            ),
+            text(
+                'Property name to ignore case',
+                'propertyNameToIgnoreCase',
+                'By adding this property to a note, containing a list of names, the linker will ignore the case for the specified names / aliases. This way you can decide, which alias should be insensitive.',
+                advanced,
+            ),
+            text(
+                'Property name to match case',
+                'propertyNameToMatchCase',
+                'By adding this property to a note, containing a list of names, the linker will match the case for the specified names / aliases. This way you can decide, which alias should be case sensitive.',
+                advanced,
+            ),
+            heading('Matched files'),
+            toggle('Include all files', 'includeAllFiles', 'Include all files for the virtual linker.', undefined, true),
+            textArea(
+                'Glossary linker directories',
+                'Directories to include for the virtual linker (one folder path or name per line).',
+                'linkerDirectories',
+                () => !this.plugin.settings.includeAllFiles,
+            ),
+            textArea(
+                'Excluded directories',
+                'Directories from which files are to be excluded for the virtual linker. Files in these directories will not create any virtual links in other files.',
+                'excludedDirectories',
+                () => this.plugin.settings.advancedSettings && this.plugin.settings.includeAllFiles,
+            ),
+            text('Tag to include file', 'tagToIncludeFile', 'Tag to explicitly include the file for the linker.', advanced),
+            text('Tag to ignore file', 'tagToExcludeFile', 'Tag to ignore the file for the linker.', advanced),
+            toggle(
+                'Exclude self-links to the current note',
+                'excludeLinksToOwnNote',
+                'If toggled, links to the note itself are excluded from the linker. (This might not work in preview windows.)',
+                advanced,
+            ),
+            textArea(
+                'Excluded directories for generating virtual links',
+                'Directories in which the plugin will not create virtual links (one folder path or name per line).',
+                'excludedDirectoriesForLinking',
+                advanced,
+            ),
+            heading('Link style'),
+            toggle(
+                'Always show multiple references',
+                'alwaysShowMultipleReferences',
+                'If toggled, if there are multiple matching notes, all references are shown behind the match. If not toggled, the references are only shown if hovering over the match.',
+            ),
+            text('Virtual link suffix', 'virtualLinkSuffix', 'The suffix to add to auto generated virtual links.'),
+            text('Virtual link suffix for aliases', 'virtualLinkAliasSuffix', 'The suffix to add to auto generated virtual links for aliases.'),
+            toggle(
+                'Apply default link styling',
+                'applyDefaultLinkStyling',
+                'If toggled, the default link styling will be applied to virtual links. You can also style them with a CSS snippet affecting the `virtual-link` class.',
+            ),
+            toggle(
+                'Use default link style for conversion',
+                'useDefaultLinkStyleForConversion',
+                'If toggled, the default link style will be used for the conversion of virtual links to real links.',
+                undefined,
+                true,
+            ),
+            {
+                name: 'Use [[Wiki-links]]',
+                desc: 'If toggled, the virtual links will be created as wiki-links instead of markdown links.',
+                visible: () => !this.plugin.settings.useDefaultLinkStyleForConversion,
+                render: (setting: Setting) => {
+                    setting.addToggle(control =>
+                        control
+                            .setValue(!this.plugin.settings.useMarkdownLinks)
+                            .onChange(value => this.saveSetting('useMarkdownLinks', !value))
+                    );
+                },
+            },
+            {
+                name: 'Link format',
+                desc: 'The format of the generated links.',
+                visible: () => !this.plugin.settings.useDefaultLinkStyleForConversion,
+                render: (setting: Setting) => {
+                    setting.addDropdown(dropdown =>
+                        dropdown
+                            .addOption('shortest', 'Shortest')
+                            .addOption('relative', 'Relative')
+                            .addOption('absolute', 'Absolute')
+                            .setValue(this.plugin.settings.linkFormat)
+                            .onChange(value => this.saveSetting('linkFormat', value as LinkerPluginSettings['linkFormat']))
+                    );
+                },
+            },
+        ];
+    }
+
     display(): void {
         const { containerEl } = this;
-
         containerEl.empty();
 
-        // Toggle to activate or deactivate the linker
-        new Setting(containerEl).setName('Activate Virtual Linker').addToggle((toggle) =>
-            toggle.setValue(this.plugin.settings.linkerActivated).onChange(async (value) => {
-                await this.plugin.updateSettings({ linkerActivated: value });
-            })
-        );
-
-        // Toggle to require the platform modifier (Cmd/Ctrl) for candidate-link clicks and hovers
-        new Setting(containerEl)
-            .setName('Require modifier key for candidate links')
-            .setDesc('When on, only modifier-held clicks and hovers activate virtual links. Disable to allow standalone clicks and hovers.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.requireModifierForCandidateLinks).onChange(async (value) => {
-                    await this.plugin.updateSettings({ requireModifierForCandidateLinks: value });
-                })
-            );
-
-        // Toggle to show advanced settings
-        new Setting(containerEl).setName('Show advanced settings').addToggle((toggle) =>
-            toggle.setValue(this.plugin.settings.advancedSettings).onChange(async (value) => {
-                await this.plugin.updateSettings({ advancedSettings: value });
-                this.display();
-            })
-        );
-
-        new Setting(containerEl).setName('Matching behavior').setHeading();
-
-        // Toggle to include aliases
-        new Setting(containerEl)
-            .setName('Include aliases')
-            .setDesc('If activated, the virtual linker will also include aliases for the files.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.includeAliases).onChange(async (value) => {
-                    await this.plugin.updateSettings({ includeAliases: value });
-                })
-            );
-
-        // Custom frontmatter fields for linking candidates
-        new Setting(containerEl)
-            .setName('Custom frontmatter fields for linking')
-            .setDesc(
-                'Additional frontmatter property names (one per line) whose values are used as ' +
-                'link candidates, independent of the aliases toggle. ' +
-                'Use this to keep your aliases clean while still creating virtual links from ' +
-                'dedicated fields such as `linker-terms` or `keywords`.'
-            )
-            .addTextArea((text) => {
-                text.setPlaceholder('e.g. linker-terms\nkeywords')
-                    .setValue((this.plugin.settings.customFrontmatterFields ?? []).join('\n'))
-                    .onChange(async (value) => {
-                        const fields = value
-                            .split('\n')
-                            .map(v => v.trim())
-                            .filter(v => v.length > 0);
-                        await this.plugin.updateSettings({ customFrontmatterFields: fields });
-                    });
-                text.inputEl.addClass('linker-settings-text-box');
-            });
-
-        if (this.plugin.settings.advancedSettings) {
-            // Toggle to only link once
-            new Setting(containerEl)
-                .setName('Only link once')
-                .setDesc('If activated, there will not be several identical virtual links in the same note (Wikipedia style). Repeated identical matches on the same line are always collapsed to the first occurrence to reduce clutter.')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.onlyLinkOnce).onChange(async (value) => {
-                        await this.plugin.updateSettings({ onlyLinkOnce: value });
-                    })
-                );
-
-            // Toggle to exclude links to real linked files
-            new Setting(containerEl)
-                .setName('Exclude links to real linked files')
-                .setDesc('If activated, there will be no links to files that are already linked in the note by real links.')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.excludeLinksToRealLinkedFiles).onChange(async (value) => {
-                        await this.plugin.updateSettings({ excludeLinksToRealLinkedFiles: value });
-                    })
-                );
-        }
-
-        // If headers should be matched or not
-        new Setting(containerEl)
-            .setName('Include headers')
-            .setDesc('If activated, headers (so your lines beginning with at least one `#`) are included for virtual links.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.includeHeaders).onChange(async (value) => {
-                    await this.plugin.updateSettings({ includeHeaders: value });
-                })
-            );
-
-        // Toggle setting to match only whole words or any part of the word
-        new Setting(containerEl)
-            .setName('Match any part of a word')
-            .setDesc('If deactivated, only whole words are matched. Otherwise, every part of a word is found.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.matchAnyPartsOfWords).onChange(async (value) => {
-                    await this.plugin.updateSettings({ matchAnyPartsOfWords: value });
-                    this.display();
-                })
-            );
-
-        if (!this.plugin.settings.matchAnyPartsOfWords) {
-            // Toggle setting to match only beginning of words
-            new Setting(containerEl)
-                .setName('Match the beginning of words')
-                .setDesc('If activated, the beginnings of words are also linked, even if it is not a whole match.')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.matchBeginningOfWords).onChange(async (value) => {
-                        await this.plugin.updateSettings({ matchBeginningOfWords: value });
-                        this.display();
-                    })
-                );
-
-            // Toggle setting to match only end of words
-            new Setting(containerEl)
-                .setName('Match the end of words')
-                .setDesc('If activated, the ends of words are also linked, even if it is not a whole match.')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.matchEndOfWords).onChange(async (value) => {
-                        await this.plugin.updateSettings({ matchEndOfWords: value });
-                        this.display();
-                    })
-                );
-        }
-
-        // Toggle setting to suppress suffix for sub words
-        if (this.plugin.settings.matchAnyPartsOfWords || this.plugin.settings.matchBeginningOfWords) {
-            new Setting(containerEl)
-                .setName('Suppress suffix for sub words')
-                .setDesc('If activated, the suffix is not added to links for subwords, but only for complete matches.')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.suppressSuffixForSubWords).onChange(async (value) => {
-                        await this.plugin.updateSettings({ suppressSuffixForSubWords: value });
-                    })
-                );
-        }
-
-        if (this.plugin.settings.advancedSettings) {
-            // Toggle setting to exclude links in the current line start for fixing IME
-            new Setting(containerEl)
-                .setName('Fix IME problem')
-                .setDesc(
-                    'If activated, there will be no links in the current line start which is followed immediately by the Input Method Editor (IME). This is the recommended setting if you are using IME (input method editor) for typing, e.g. for chinese characters, because instant linking might interfere with IME.'
-                )
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.fixIMEProblem).onChange(async (value) => {
-                        await this.plugin.updateSettings({ fixIMEProblem: value });
-                    })
-                );
-        }
-
-        if (this.plugin.settings.advancedSettings) {
-            // Toggle setting to exclude links in the current line
-            new Setting(containerEl)
-                .setName('Avoid linking in current line')
-                .setDesc('If activated, there will be no links in the current line.')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.excludeLinksInCurrentLine).onChange(async (value) => {
-                        await this.plugin.updateSettings({ excludeLinksInCurrentLine: value });
-                    })
-                );
-
-            // Input for setting the word boundary regex
-            // new Setting(containerEl)
-            // 	.setName('Word boundary regex')
-            // 	.setDesc('The regex for the word boundary. This regex is used to find the beginning and end of a word. It is used to find the boundaries of the words to match. Defaults to /[\t- !-/:-@\[-`{-~\p{Emoji_Presentation}\p{Extended_Pictographic}]/u to catch most word boundaries.')
-            // 	.addText((text) =>
-            // 		text
-            // 			.setValue(this.plugin.settings.wordBoundaryRegex)
-            // 			.onChange(async (value) => {
-            // 				try {
-            // 					await this.plugin.updateSettings({ wordBoundaryRegex: value });
-            // 				} catch (e) {
-            // 					console.error('Invalid regex', e);
-            // 				}
-            // 			})
-            // 	);
-        }
-
-        new Setting(containerEl).setName('Case sensitivity').setHeading();
-
-        // Toggle setting for case sensitivity
-        new Setting(containerEl)
-            .setName('Case sensitive')
-            .setDesc('If activated, the matching is case sensitive.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.matchCaseSensitive).onChange(async (value) => {
-                    await this.plugin.updateSettings({ matchCaseSensitive: value });
-                    this.display();
-                })
-            );
-
-        if (this.plugin.settings.advancedSettings) {
-            // Number input setting for capital letter proportion for automatic match case
-            new Setting(containerEl)
-                .setName('Capital letter percentage for automatic match case')
-                .setDesc(
-                    'The percentage (0 - 100) of capital letters in a file name or alias to be automatically considered as case sensitive.'
-                )
-                .addText((text) =>
-                    text
-                        .setValue((this.plugin.settings.capitalLetterProportionForAutomaticMatchCase * 100).toFixed(1))
-                        .onChange(async (value) => {
-                            let newValue = parseFloat(value);
-                            if (isNaN(newValue)) {
-                                newValue = 75;
-                            } else if (newValue < 0) {
-                                newValue = 0;
-                            } else if (newValue > 100) {
-                                newValue = 100;
-                            }
-                            newValue /= 100;
-
-                            await this.plugin.updateSettings({ capitalLetterProportionForAutomaticMatchCase: newValue });
-                        })
-                );
-
-            if (this.plugin.settings.matchCaseSensitive) {
-                // Text setting for tag to ignore case
-                new Setting(containerEl)
-                    .setName('Tag to ignore case')
-                    .setDesc('By adding this tag to a file, the linker will ignore the case for the file.')
-                    .addText((text) =>
-                        text.setValue(this.plugin.settings.tagToIgnoreCase).onChange(async (value) => {
-                            await this.plugin.updateSettings({ tagToIgnoreCase: value });
-                        })
-                    );
-            } else {
-                // Text setting for tag to match case
-                new Setting(containerEl)
-                    .setName('Tag to match case')
-                    .setDesc('By adding this tag to a file, the linker will match the case for the file.')
-                    .addText((text) =>
-                        text.setValue(this.plugin.settings.tagToMatchCase).onChange(async (value) => {
-                            await this.plugin.updateSettings({ tagToMatchCase: value });
-                        })
-                    );
-            }
-
-            // Text setting for property name to ignore case
-            new Setting(containerEl)
-                .setName('Property name to ignore case')
-                .setDesc(
-                    'By adding this property to a note, containing a list of names, the linker will ignore the case for the specified names / aliases. This way you can decide, which alias should be insensitive.'
-                )
-                .addText((text) =>
-                    text.setValue(this.plugin.settings.propertyNameToIgnoreCase).onChange(async (value) => {
-                        await this.plugin.updateSettings({ propertyNameToIgnoreCase: value });
-                    })
-                );
-
-            // Text setting for property name to match case
-            new Setting(containerEl)
-                .setName('Property name to match case')
-                .setDesc(
-                    'By adding this property to a note, containing a list of names, the linker will match the case for the specified names / aliases. This way you can decide, which alias should be case sensitive.'
-                )
-                .addText((text) =>
-                    text.setValue(this.plugin.settings.propertyNameToMatchCase).onChange(async (value) => {
-                        await this.plugin.updateSettings({ propertyNameToMatchCase: value });
-                    })
-                );
-        }
-
-        new Setting(containerEl).setName('Matched files').setHeading();
-
-        new Setting(containerEl)
-            .setName('Include all files')
-            .setDesc('Include all files for the virtual linker.')
-            .addToggle((toggle) =>
-                toggle
-                    // .setValue(true)
-                    .setValue(this.plugin.settings.includeAllFiles)
-                    .onChange(async (value) => {
-                        await this.plugin.updateSettings({ includeAllFiles: value });
-                        this.display();
-                    })
-            );
-
-        if (!this.plugin.settings.includeAllFiles) {
-            new Setting(containerEl)
-                .setName('Glossary linker directories')
-                .setDesc('Directories to include for the virtual linker (one folder path or name per line).')
-                .addTextArea((text) => {
-                    let setValue = '';
-                    try {
-                        setValue = this.plugin.settings.linkerDirectories.join('\n');
-                    } catch (e) {
-                        console.warn(e);
-                    }
-
-                    text.setPlaceholder('List of directory paths or names (one per line)')
-                        .setValue(setValue)
-                        .onChange(async (value) => {
-                            this.plugin.settings.linkerDirectories = value
-                                .split('\n')
-                                .map((x) => x.trim())
-                                .filter((x) => x.length > 0);
-                            await this.plugin.updateSettings();
-                        });
-
-                    // Set default size
-                    text.inputEl.addClass('linker-settings-text-box');
-                });
-        } else {
-            if (this.plugin.settings.advancedSettings) {
-                new Setting(containerEl)
-                    .setName('Excluded directories')
-                    .setDesc(
-                        'Directories from which files are to be excluded for the virtual linker (one folder path or name per line). Files in these directories will not create any virtual links in other files.'
-                    )
-                    .addTextArea((text) => {
-                        let setValue = '';
-                        try {
-                            setValue = this.plugin.settings.excludedDirectories.join('\n');
-                        } catch (e) {
-                            console.warn(e);
-                        }
-
-                        text.setPlaceholder('List of directory paths or names (one per line)')
-                            .setValue(setValue)
-                            .onChange(async (value) => {
-                                this.plugin.settings.excludedDirectories = value
-                                    .split('\n')
-                                    .map((x) => x.trim())
-                                    .filter((x) => x.length > 0);
-                                await this.plugin.updateSettings();
-                            });
-
-                        // Set default size
-                        text.inputEl.addClass('linker-settings-text-box');
-                    });
-            }
-        }
-
-        if (this.plugin.settings.advancedSettings) {
-            // Text setting for tag to include file
-            new Setting(containerEl)
-                .setName('Tag to include file')
-                .setDesc('Tag to explicitly include the file for the linker.')
-                .addText((text) =>
-                    text.setValue(this.plugin.settings.tagToIncludeFile).onChange(async (value) => {
-                        await this.plugin.updateSettings({ tagToIncludeFile: value });
-                    })
-                );
-
-            // Text setting for tag to ignore file
-            new Setting(containerEl)
-                .setName('Tag to ignore file')
-                .setDesc('Tag to ignore the file for the linker.')
-                .addText((text) =>
-                    text.setValue(this.plugin.settings.tagToExcludeFile).onChange(async (value) => {
-                        await this.plugin.updateSettings({ tagToExcludeFile: value });
-                    })
-                );
-
-            // Toggle setting to exclude links to the active file
-            new Setting(containerEl)
-                .setName('Exclude self-links to the current note')
-                .setDesc('If toggled, links to the note itself are excluded from the linker. (This might not work in preview windows.)')
-                .addToggle((toggle) =>
-                    toggle.setValue(this.plugin.settings.excludeLinksToOwnNote).onChange(async (value) => {
-                        await this.plugin.updateSettings({ excludeLinksToOwnNote: value });
-                    })
-                );
-
-            // Setting to exclude directories from the linker to be executed
-            new Setting(containerEl)
-                .setName('Excluded directories for generating virtual links')
-                .setDesc('Directories in which the plugin will not create virtual links (one folder path or name per line).')
-                .addTextArea((text) => {
-                    let setValue = '';
-                    try {
-                        setValue = this.plugin.settings.excludedDirectoriesForLinking.join('\n');
-                    } catch (e) {
-                        console.warn(e);
-                    }
-
-                    text.setPlaceholder('List of directory paths or names (one per line)')
-                        .setValue(setValue)
-                        .onChange(async (value) => {
-                            this.plugin.settings.excludedDirectoriesForLinking = value
-                                .split('\n')
-                                .map((x) => x.trim())
-                                .filter((x) => x.length > 0);
-                            await this.plugin.updateSettings();
-                        });
-
-                    // Set default size
-                    text.inputEl.addClass('linker-settings-text-box');
-                });
-        }
-
-        new Setting(containerEl).setName('Link style').setHeading();
-
-        new Setting(containerEl)
-            .setName('Always show multiple references')
-            .setDesc('If toggled, if there are multiple matching notes, all references are shown behind the match. If not toggled, the references are only shown if hovering over the match.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.alwaysShowMultipleReferences).onChange(async (value) => {
-                    await this.plugin.updateSettings({ alwaysShowMultipleReferences: value });
-                })
-            );
-
-        new Setting(containerEl)
-            .setName('Virtual link suffix')
-            .setDesc('The suffix to add to auto generated virtual links.')
-            .addText((text) =>
-                text.setValue(this.plugin.settings.virtualLinkSuffix).onChange(async (value) => {
-                    await this.plugin.updateSettings({ virtualLinkSuffix: value });
-                })
-            );
-        new Setting(containerEl)
-            .setName('Virtual link suffix for aliases')
-            .setDesc('The suffix to add to auto generated virtual links for aliases.')
-            .addText((text) =>
-                text.setValue(this.plugin.settings.virtualLinkAliasSuffix).onChange(async (value) => {
-                    await this.plugin.updateSettings({ virtualLinkAliasSuffix: value });
-                })
-            );
-
-        // Toggle setting to apply default link styling
-        new Setting(containerEl)
-            .setName('Apply default link styling')
-            .setDesc(
-                'If toggled, the default link styling will be applied to virtual links. Furthermore, you can style the links yourself with a CSS-snippet affecting the class `virtual-link`. (Find the CSS snippet directory at Appearance -> CSS Snippets -> Open snippets folder)'
-            )
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.applyDefaultLinkStyling).onChange(async (value) => {
-                    await this.plugin.updateSettings({ applyDefaultLinkStyling: value });
-                })
-            );
-
-        // Toggle setting to use default link style for conversion
-        new Setting(containerEl)
-            .setName('Use default link style for conversion')
-            .setDesc('If toggled, the default link style will be used for the conversion of virtual links to real links.')
-            .addToggle((toggle) =>
-                toggle.setValue(this.plugin.settings.useDefaultLinkStyleForConversion).onChange(async (value) => {
-                    await this.plugin.updateSettings({ useDefaultLinkStyleForConversion: value });
-                    this.display();
-                })
-            );
-
-        if (!this.plugin.settings.useDefaultLinkStyleForConversion) {
-            // Toggle setting to use markdown links
-            new Setting(containerEl)
-                .setName('Use [[Wiki-links]]')
-                .setDesc('If toggled, the virtual links will be created as wiki-links instead of markdown links.')
-                .addToggle((toggle) =>
-                    toggle.setValue(!this.plugin.settings.useMarkdownLinks).onChange(async (value) => {
-                        await this.plugin.updateSettings({ useMarkdownLinks: !value });
-                    })
-                );
-
-            // Dropdown setting for link format
-            new Setting(containerEl)
-                .setName('Link format')
-                .setDesc('The format of the generated links.')
-                .addDropdown((dropdown) =>
-                    dropdown
-                        .addOption('shortest', 'Shortest')
-                        .addOption('relative', 'Relative')
-                        .addOption('absolute', 'Absolute')
-                        .setValue(this.plugin.settings.linkFormat)
-                        .onChange(async (value) => {
-                            await this.plugin.updateSettings({ linkFormat: value as 'shortest' | 'relative' | 'absolute' });
-                        })
-                );
+        for (const definition of this.getSettingDefinitions()) {
+            if (!definition.visible()) continue;
+            const setting = new Setting(containerEl).setName(definition.name);
+            if (definition.desc) setting.setDesc(definition.desc);
+            definition.render(setting);
         }
     }
 }

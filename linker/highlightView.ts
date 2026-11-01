@@ -47,7 +47,7 @@ export class HighlightView extends ItemView {
         this.unsubHighlight = this.hs.onUpdate(() => {
             // Force a full re-render when highlights change.
             this.renderedHash = null;
-            this.refresh();
+            void this.refresh();
         });
 
         // Refresh when the user switches panes or changes the file inside the
@@ -129,7 +129,7 @@ export class HighlightView extends ItemView {
         const allSameSearch = groups.every(g => g.searchText === groups[0].searchText);
         if (allSameSearch) {
             const hdr = this.contentEl.createDiv({ cls: 'virtual-autolink-hl-header' });
-            hdr.createEl('div', { cls: 'virtual-autolink-hl-term' }).setText(`"${groups[0].searchText}"`);
+            hdr.createDiv({ cls: 'virtual-autolink-hl-term' }).setText(`"${groups[0].searchText}"`);
         }
 
         // ── Render each file group ───────────────────────────────────────────
@@ -195,8 +195,8 @@ export class HighlightView extends ItemView {
 
         // File header
         const hdr = groupEl.createDiv({ cls: 'virtual-autolink-hl-file-header' });
-        hdr.createEl('span', { cls: 'virtual-autolink-hl-filename' }).setText(group.fileName);
-        hdr.createEl('span', { cls: 'virtual-autolink-hl-count' }).setText(
+        hdr.createSpan({ cls: 'virtual-autolink-hl-filename' }).setText(group.fileName);
+        hdr.createSpan({ cls: 'virtual-autolink-hl-count' }).setText(
             `${group.occurrences.length}`
         );
 
@@ -222,11 +222,11 @@ export class HighlightView extends ItemView {
                 void this.handleDismiss(group.filePath, group.searchText, group.fileName);
             });
 
-            item.createEl('span', { cls: 'virtual-autolink-hl-lineno' })
+            item.createSpan({ cls: 'virtual-autolink-hl-lineno' })
                 .setText(`L${occ.line + 1}`);
 
             this.renderContextLine(
-                item.createEl('span', { cls: 'virtual-autolink-hl-ctx' }),
+                item.createSpan({ cls: 'virtual-autolink-hl-ctx' }),
                 occ.rawLine, occ.ch, occ.matchText,
             );
 
@@ -279,7 +279,7 @@ export class HighlightView extends ItemView {
         const slice  = rawLine.slice(start, end);
 
         const ownerDoc = el.ownerDocument;
-        const frag = ownerDoc.createDocumentFragment();
+        const frag = el.ownerDocument.adoptNode(createFragment());
         const relStart = Math.max(0, matchStart - start);
         const relEnd = Math.min(slice.length, relStart + matchText.length);
 
@@ -288,10 +288,8 @@ export class HighlightView extends ItemView {
             frag.appendChild(ownerDoc.createTextNode(slice.slice(0, relStart)));
         }
 
-        const mark = ownerDoc.createElement('mark');
-        mark.className = 'virtual-autolink-highlight';
+        const mark = frag.createEl('mark', { cls: 'virtual-autolink-highlight' });
         mark.textContent = slice.slice(relStart, relEnd);
-        frag.appendChild(mark);
 
         if (relEnd < slice.length) {
             frag.appendChild(ownerDoc.createTextNode(slice.slice(relEnd)));
@@ -319,11 +317,11 @@ export class HighlightView extends ItemView {
         const byLine = previewRoot.querySelector(
             `mark.virtual-autolink-highlight[data-virtual-autolink-source-line="${occ.line}"]`
         );
-        if (byLine instanceof HTMLElement) return byLine;
+        if (byLine?.instanceOf(HTMLElement)) return byLine;
 
         const marks = previewRoot.querySelectorAll('mark.virtual-autolink-highlight');
         const byIndex = marks[occ.index];
-        return byIndex instanceof HTMLElement ? byIndex : null;
+        return byIndex?.instanceOf(HTMLElement) ? byIndex : null;
     }
 
     private queuePreviewOccurrenceScroll(
@@ -349,7 +347,12 @@ export class HighlightView extends ItemView {
                 getEphemeralState?: () => Record<string, unknown> | null | undefined;
                 setEphemeralState?: (state: Record<string, unknown>) => void;
             };
-            const currentState = previewStateView.getEphemeralState?.() ?? {};
+            const rawState: unknown = previewStateView.getEphemeralState?.();
+            const currentState = rawState !== null
+                && typeof rawState === 'object'
+                && !Array.isArray(rawState)
+                ? rawState as Record<string, unknown>
+                : {};
             previewStateView.setEphemeralState?.({
                 ...currentState,
                 line: occ.line,
