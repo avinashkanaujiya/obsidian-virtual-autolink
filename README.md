@@ -30,6 +30,14 @@ If you only want to include notes of a specific folder, you can define this fold
 > The auto generated links are post-processed, so they neither change your note text to hard-coded links enclosed in brackets not 
 > appear in the graph view or reference counting.
 
+## Vault access and privacy
+
+Virtual Autolink uses Obsidian's `vault.getMarkdownFiles()` API to enumerate Markdown notes across your vault. Review tools may flag this as **Vault Enumeration** because it exposes note paths to the plugin. This access is required to discover link targets beyond the currently open note and keep virtual links up to date as notes change.
+
+The matching index uses note names and paths, plus Obsidian's cached metadata for aliases, tags, and configured frontmatter fields. Enumerating notes does not mean reading every note's full contents, and this API does not enumerate non-Markdown attachments. The Highlights panel separately reads the contents of notes with active highlights to display matching occurrences.
+
+Folder and tag inclusion/exclusion settings control which notes become link targets; they do not prevent vault-wide enumeration during index updates or act as file-access permissions. Matching and highlighting run locally; the plugin does not upload note paths, metadata, or contents to an external service.
+
 ## Installing the plugin
 
 ### Via BRAT (Recommended)
