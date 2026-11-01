@@ -115,15 +115,21 @@ By default (and if the default styling is toggled on in the settings), virtual l
 The multi-candidate chooser still waits for a short hover delay before appearing, which avoids flicker when the pointer only passes over a link. Display-text highlights still use the current theme accent.
 You can turn off this default styling in the settings.
 
-To apply custom styling to the links, you can add a CSS-snippet at `VaultFolder/.obsidian/snippets/virtualLinks.css` file.
+To apply custom styling to the links, add a CSS snippet at `VaultFolder/.obsidian/snippets/virtualLinks.css`. Scoped anchor selectors override theme defaults without `!important`:
 
 ```css
-.virtual-link .virtual-link-a,
-.virtual-link .virtual-link-open-all {
-    color: inherit !important;
+.virtual-link.virtual-link-span a.internal-link.virtual-link-a,
+.virtual-link.virtual-link-span a.internal-link.virtual-link-open-all {
+    color: inherit;
     font: inherit;
-    text-decoration: inherit !important;
+    text-decoration: inherit;
     box-shadow: inset 0 -1px 0 0 color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.virtual-link.virtual-link-span a.internal-link.virtual-link-a:hover,
+.virtual-link.virtual-link-span a.internal-link.virtual-link-open-all:hover {
+    color: inherit;
+    text-decoration: inherit;
 }
 ```
 
@@ -165,10 +171,12 @@ It is recommended to use the [Hot Reload Plugin](https://github.com/pjeby/hot-re
 
 ### Quality checks
 
-`npm run check` runs release-metadata validation, Obsidian's recommended type-aware lint rules for production TypeScript, basic linting for tests and Node scripts, the full Jest suite, and TypeScript checking plus the production build. Lint warnings fail the gate. Every stage runs even if an earlier stage fails; the command exits nonzero if any stage fails.
+`npm run check` runs release-metadata validation, Obsidian's recommended type-aware lint rules for production TypeScript, basic linting for tests and Node scripts, CSS linting, the full Jest suite, and TypeScript checking plus the production build. Lint warnings fail the gate. Every stage runs even if an earlier stage fails; the command exits nonzero if any stage fails. Run `npm run lint:css` for CSS-only checks, including the ban on `!important`.
 
 Use `npm run lint:fix` for supported ESLint autofixes, review its changes, then rerun `npm run check`. The default check does not rewrite source, install dependencies, commit, push, or deploy; the build updates the ignored `main.js`.
 
 Checks are local-only for now. Repo `AGENTS.md` instructs coding agents to run and fix the gate each session; this is not a background watcher, and watch compilation alone does not run the full checks. Existing release automation is unchanged.
 
 Automated checks do not replace smoke-testing changed behavior in an isolated Obsidian vault. They also do not query the registry for SDK updates or run a dependency-security audit. The SDK is pinned to Obsidian 1.14.4; changes to that target must keep `manifest.json`, `versions.json`, and the lockfile aligned.
+
+TypeScript explicitly declares DOM and ES2019 APIs, including `Object.fromEntries`; this avoids depending on newer API types accidentally supplied by development dependencies. Production JavaScript bundling still targets ES2018 syntax. Declaring API types does not add runtime polyfills.

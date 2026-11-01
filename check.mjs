@@ -32,6 +32,7 @@ try {
 
 for (const [name, args] of [
     ['Static analysis (zero warnings)', ['run', 'lint']],
+    ['CSS lint (zero warnings)', ['run', 'lint:css']],
     ['Tests', ['test', '--', '--runInBand']],
     ['TypeScript and production build', ['run', 'build']],
 ]) {

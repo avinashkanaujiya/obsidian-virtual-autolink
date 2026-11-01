@@ -14,17 +14,18 @@
   Using box-shadow here avoids interfering with surrounding markdown
   decorations such as highlights and strikethrough.
 */
-.virtual-link-default .virtual-link-a,
-.virtual-link-default .virtual-link-open-all {
-    color: inherit !important;
+.virtual-link.virtual-link-default a.internal-link.virtual-link-a,
+.virtual-link.virtual-link-default a.internal-link.virtual-link-open-all {
+    color: inherit;
     font: inherit;
-    text-decoration: inherit !important;
+    text-decoration: inherit;
     box-shadow: inset 0 -1px 0 0 color-mix(in srgb, currentColor 10%, transparent);
 }
 
-.virtual-link-default .virtual-link-a:hover,
-.virtual-link-default .virtual-link-open-all:hover {
-    color: inherit !important;
+.virtual-link.virtual-link-default a.internal-link.virtual-link-a:hover,
+.virtual-link.virtual-link-default a.internal-link.virtual-link-open-all:hover {
+    color: inherit;
+    text-decoration: inherit;
 }
 
 /* ── Settings textarea ────────────────────────────────────────────────────── */
