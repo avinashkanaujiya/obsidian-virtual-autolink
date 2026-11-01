@@ -38,7 +38,7 @@ export class HighlightView extends ItemView {
     }
 
     getViewType()    { return HIGHLIGHT_VIEW_TYPE; }
-    getDisplayText() { return 'Virtual Autolink Highlights'; }
+    getDisplayText() { return 'Virtual Autolink highlights'; }
     getIcon()        { return 'highlighter'; }
 
     async onOpen(): Promise<void> {

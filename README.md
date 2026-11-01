@@ -46,7 +46,7 @@ If you only want to include notes of a specific folder, you can define this fold
 
 ## Settings
 
-On Obsidian 1.13 or later, Virtual Autolink settings appear in Obsidian's settings search. Older supported versions retain the plugin's settings tab. Advanced and conditional settings keep their existing visibility rules.
+Version 3.1.3 and later require Obsidian 1.14.4 or newer and use its searchable declarative settings API. Advanced and conditional settings keep their existing visibility rules. Version 3.1.2 retains support for Obsidian 1.5.0.
 
 ## Matched files
 
@@ -139,7 +139,7 @@ Clicking candidate links collects highlights for the opened notes without openin
 
 The plugin provides the following commands that you can use:
 
-- **Convert All Virtual Links in Selection to Real Links**: Converts all virtual links within the selected text to real links.
+- **Convert all virtual links in selection to real links**: Converts all virtual links within the selected text to real links.
 - **Activate Virtual Linker**: Activates Virtual Autolink if it is currently deactivated.
 - **Deactivate Virtual Linker**: Deactivates Virtual Autolink if it is currently activated.
 - **Open highlights**: Opens the Highlights panel intentionally; candidate-link navigation never opens or focuses it automatically.
@@ -157,8 +157,18 @@ When right-clicking on a virtual link, the following options are available in th
 ## How to use for development
 
 - Clone [this repo](https://github.com/avinashkanaujiya/obsidian-virtual-autolink) into `your-vault/.obsidian/plugins/`.
-- `yarn` to install dependencies
-- `yarn dev` to start compilation in watch mode.
-- `yarn build` to compile your `main.ts` into `main.js`.
+- Use Node.js 22.19 or newer and run `npm ci` to install the locked dependencies.
+- Run `npm run check` at the start of a coding session and after changes, before committing or handing off.
+- `npm run dev` starts compilation in watch mode; `npm run build` creates the production bundle.
 
 It is recommended to use the [Hot Reload Plugin](https://github.com/pjeby/hot-reload) for development.
+
+### Quality checks
+
+`npm run check` runs release-metadata validation, Obsidian's recommended type-aware lint rules for production TypeScript, basic linting for tests and Node scripts, the full Jest suite, and TypeScript checking plus the production build. Lint warnings fail the gate. Every stage runs even if an earlier stage fails; the command exits nonzero if any stage fails.
+
+Use `npm run lint:fix` for supported ESLint autofixes, review its changes, then rerun `npm run check`. The default check does not rewrite source, install dependencies, commit, push, or deploy; the build updates the ignored `main.js`.
+
+Checks are local-only for now. Repo `AGENTS.md` instructs coding agents to run and fix the gate each session; this is not a background watcher, and watch compilation alone does not run the full checks. Existing release automation is unchanged.
+
+Automated checks do not replace smoke-testing changed behavior in an isolated Obsidian vault. They also do not query the registry for SDK updates or run a dependency-security audit. The SDK is pinned to Obsidian 1.14.4; changes to that target must keep `manifest.json`, `versions.json`, and the lockfile aligned.

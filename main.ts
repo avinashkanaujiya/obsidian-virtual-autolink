@@ -619,7 +619,7 @@ export default class LinkerPlugin extends Plugin {
 
         this.addCommand({
             id: 'convert-selected-virtual-links',
-            name: 'Convert All Virtual Links in Selection to Real Links',
+            name: 'Convert all virtual links in selection to real links',
             checkCallback: (checking: boolean) => {
                 const view = this.app.workspace.getActiveViewOfType(MarkdownView);
                 const editor = view?.editor;
@@ -834,7 +834,7 @@ export default class LinkerPlugin extends Plugin {
                     menu.addItem((item) => {
                         // Item to convert a virtual link to a real link
                         item.setTitle(
-                            '[Virtual Linker] Converting link is not here.'
+                            '[Virtual Linker] converting link is not here.'
                         ).setIcon('link');
                     });
                 }
@@ -842,7 +842,7 @@ export default class LinkerPlugin extends Plugin {
                 else if (isVirtualLink) {
                     menu.addItem((item) => {
                         // Item to convert a virtual link to a real link
-                        item.setTitle('[Virtual Linker] Convert to real link')
+                        item.setTitle('[Virtual Linker] convert to real link')
                             .setIcon('link')
                             .onClick(() => {
                                                                 const from = parseInt(targetElement.getAttribute('from') || '-1');
@@ -885,7 +885,7 @@ export default class LinkerPlugin extends Plugin {
                 // Item to exclude a virtual link from the linker
                 // This action adds the settings.tagToExcludeFile to the file
                 menu.addItem((item) => {
-                    item.setTitle('[Virtual Linker] Exclude this file')
+                    item.setTitle('[Virtual Linker] exclude this file')
                         .setIcon('trash')
                         .onClick(async () => {
                             // Get the shown text
@@ -914,7 +914,7 @@ export default class LinkerPlugin extends Plugin {
                 //Item to include a virtual link from the linker
                 // This action adds the settings.tagToIncludeFile to the file
                 menu.addItem((item) => {
-                    item.setTitle('[Virtual Linker] Include this file')
+                    item.setTitle('[Virtual Linker] include this file')
                         .setIcon('plus')
                         .onClick(async () => {
                             // Get the shown text
@@ -952,7 +952,7 @@ export default class LinkerPlugin extends Plugin {
             // If the directory is in the linker directories, add the option to exclude it
             if ((fetcher.includeAllFiles && !isInExcludedDir) || isInIncludedDir) {
                 menu.addItem((item) => {
-                    item.setTitle('[Virtual Linker] Exclude this directory')
+                    item.setTitle('[Virtual Linker] exclude this directory')
                         .setIcon('trash')
                         .onClick(async () => {
                             // Get the shown text
@@ -978,7 +978,7 @@ export default class LinkerPlugin extends Plugin {
             } else if ((!fetcher.includeAllFiles && !isInIncludedDir) || isInExcludedDir) {
                 // If the directory is in the excluded directories, add the option to include it
                 menu.addItem((item) => {
-                    item.setTitle('[Virtual Linker] Include this directory')
+                    item.setTitle('[Virtual Linker] include this directory')
                         .setIcon('plus')
                         .onClick(async () => {
                             // Get the shown text
@@ -1011,17 +1011,14 @@ export default class LinkerPlugin extends Plugin {
      */
     private async revealHighlightSidebar(): Promise<void> {
         const existing = this.app.workspace.getLeavesOfType(HIGHLIGHT_VIEW_TYPE);
-        if (existing.length > 0) {
-            await this.app.workspace.revealLeaf(existing[0]);
-            return;
+        let leaf = existing[0];
+        if (!leaf) {
+            const rightLeaf = this.app.workspace.getRightLeaf(false);
+            if (!rightLeaf) return;
+            await rightLeaf.setViewState({ type: HIGHLIGHT_VIEW_TYPE, active: true });
+            leaf = rightLeaf;
         }
-        // getRightLeaf(false) reuses an existing right-sidebar leaf without
-        // splitting; it creates one if the sidebar is completely empty.
-        const leaf = this.app.workspace.getRightLeaf(false);
-        if (leaf) {
-            await leaf.setViewState({ type: HIGHLIGHT_VIEW_TYPE, active: true });
-            await this.app.workspace.revealLeaf(leaf);
-        }
+        await this.app.workspace.revealLeaf(leaf);
     }
 
     /**
@@ -1153,11 +1150,7 @@ class LinkerSettingTab extends PluginSettingTab {
     }
 
     private refreshSettings(): void {
-        if (typeof this.update === 'function') {
-            this.update();
-        } else {
-            this.display();
-        }
+        this.update();
     }
 
     getSettingDefinitions() {
@@ -1428,15 +1421,4 @@ class LinkerSettingTab extends PluginSettingTab {
         ];
     }
 
-    display(): void {
-        const { containerEl } = this;
-        containerEl.empty();
-
-        for (const definition of this.getSettingDefinitions()) {
-            if (!definition.visible()) continue;
-            const setting = new Setting(containerEl).setName(definition.name);
-            if (definition.desc) setting.setDesc(definition.desc);
-            definition.render(setting);
-        }
-    }
 }
