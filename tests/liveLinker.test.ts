@@ -1,5 +1,5 @@
 import { MarkdownView, TFile } from 'obsidian';
-import { collectVirtualLinkSyntaxClasses, resolveMarkdownViewForEditorDOM } from '../linker/liveLinker';
+import { resolveMarkdownViewForEditorDOM } from '../linker/liveLinker';
 
 function makeFile(path: string): TFile {
     const base = path.split('/').pop() ?? path;
@@ -22,18 +22,6 @@ function makeMarkdownView(path: string, contentEl: { parentNode: unknown }): Mar
     return view;
 }
 
-describe('collectVirtualLinkSyntaxClasses', () => {
-    it('returns an empty list when domAtPos throws during a transient editor update', () => {
-        const view = {
-            domAtPos: jest.fn(() => {
-                throw new Error('transient dom state');
-            }),
-        };
-
-        expect(collectVirtualLinkSyntaxClasses(view as never, 10, 14)).toEqual([]);
-        expect(view.domAtPos).toHaveBeenCalledTimes(2);
-    });
-});
 
 describe('resolveMarkdownViewForEditorDOM', () => {
     function makeNestedDescendant(parentNode: { parentNode: unknown }, depth: number): { parentNode: unknown } {

@@ -41,53 +41,17 @@ export function resolveMarkdownViewForEditorDOM(app: App, editorDom: HTMLElement
 }
 
 export class VirtualLinkWidget extends WidgetType {
-    constructor(
-        public match: VirtualMatch,
-        public highlightText: string | null = null,
-        public syntaxClasses: string[] = [],
-    ) {
+    constructor(public match: VirtualMatch) {
         super();
     }
     toDOM(view: EditorView): HTMLElement {
-        return this.match.getCompleteLinkElement(this.highlightText, this.syntaxClasses, view.dom.ownerDocument);
+        const span = this.match.getCompleteLinkElement(null, [], view.dom.ownerDocument);
+        // Only auxiliary controls need a widget; leave document text to CodeMirror.
+        span.firstChild?.remove();
+        return span;
     }
 }
 
-const LIVE_PREVIEW_SYNTAX_CLASSES = ['cm-highlight', 'cm-strikethrough', 'cm-strong', 'cm-em'];
-
-function addVirtualLinkSyntaxClassesFromNode(node: Node | null | undefined, classes: Set<string>): void {
-    let current: Node | null | undefined = node;
-    while (current) {
-        const classList = (current as { classList?: DOMTokenList }).classList;
-        if (classList) {
-            LIVE_PREVIEW_SYNTAX_CLASSES.forEach((className) => {
-                if (classList.contains(className)) {
-                    classes.add(className);
-                }
-            });
-        }
-        current = current.parentNode;
-    }
-}
-
-function safeDomNodeAtPos(view: EditorView, pos: number): Node | null {
-    try {
-        return view.domAtPos(pos).node;
-    } catch {
-        return null;
-    }
-}
-
-export function collectVirtualLinkSyntaxClasses(view: EditorView, from: number, to: number): string[] {
-    const classes = new Set<string>();
-
-    addVirtualLinkSyntaxClassesFromNode(safeDomNodeAtPos(view, from), classes);
-    if (to > from) {
-        addVirtualLinkSyntaxClassesFromNode(safeDomNodeAtPos(view, to - 1), classes);
-    }
-
-    return Array.from(classes);
-}
 
 class VirtualAutoLinkerPlugin implements PluginValue {
     decorations: DecorationSet;
@@ -362,7 +326,7 @@ class VirtualAutoLinkerPlugin implements PluginValue {
                 ? (this.app.metadataCache.getFileCache(sourceFile)?.frontmatterPosition?.end.offset ?? -1)
                 : -1;
 
-            type WidgetAddition = { match: VirtualMatch; from: number; to: number; syntaxClasses: string[] };
+            type WidgetAddition = { match: VirtualMatch; from: number; to: number };
 
             const widgetAdditions: WidgetAddition[] = [];
 
@@ -410,7 +374,6 @@ class VirtualAutoLinkerPlugin implements PluginValue {
                         match: addition,
                         from,
                         to,
-                        syntaxClasses: collectVirtualLinkSyntaxClasses(view, from, to),
                     });
                 }
             });
@@ -482,19 +445,49 @@ class VirtualAutoLinkerPlugin implements PluginValue {
                 decoSpecs.push({
                     from: widgetAddition.from,
                     to: widgetAddition.to,
-                    deco: Decoration.replace({
-                        widget: new VirtualLinkWidget(
-                            widgetAddition.match,
-                            highlightedVirtualLinkTexts.get(key) ?? null,
-                            widgetAddition.syntaxClasses,
-                        ),
+                    deco: Decoration.mark({
+                        class: widgetAddition.match.getLinkRootSpan().className,
+                        inclusive: true,
                     }),
                 });
+                const anchor = widgetAddition.match.getLinkAnchorElement(
+                    widgetAddition.match.originText,
+                    widgetAddition.match.files[0]?.path ?? '',
+                );
+                if (widgetAddition.match.files.length > 1) {
+                    anchor.setAttribute('data-open-all-paths', JSON.stringify(widgetAddition.match.files.map(file => file.path)));
+                }
+                decoSpecs.push({
+                    from: widgetAddition.from,
+                    to: widgetAddition.to,
+                    deco: Decoration.mark({
+                        tagName: 'a',
+                        attributes: Object.fromEntries(Array.from(anchor.attributes, attribute => [attribute.name, attribute.value])),
+                    }),
+                });
+                const highlightedText = highlightedVirtualLinkTexts.get(key);
+                const highlightedMatch = highlightedText ? findFirstMatch(widgetAddition.match.originText, highlightedText) : null;
+                if (highlightedMatch) {
+                    decoSpecs.push({
+                        from: widgetAddition.from + highlightedMatch.index,
+                        to: widgetAddition.from + highlightedMatch.index + highlightedMatch.matchText.length,
+                        deco: Decoration.mark({ class: 'virtual-autolink-highlight' }),
+                    });
+                }
+                const match = widgetAddition.match;
+                if (match.files.length > 1 || ((!match.isSubWord || !this.settings.suppressSuffixForSubWords) &&
+                    (match.isAlias ? this.settings.virtualLinkAliasSuffix : this.settings.virtualLinkSuffix))) {
+                    decoSpecs.push({
+                        from: widgetAddition.to,
+                        to: widgetAddition.to,
+                        deco: Decoration.widget({ widget: new VirtualLinkWidget(match), side: -1 }),
+                    });
+                }
             }
 
             // Sort all decoration specs by ascending `from` (then `to`) before
             // adding to the builder, as required by CM6.
-            decoSpecs.sort((a, b) => a.from !== b.from ? a.from - b.from : a.to - b.to);
+            decoSpecs.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to);
             for (const { from: f, to: t, deco } of decoSpecs) {
                 builder.add(f, t, deco);
             }

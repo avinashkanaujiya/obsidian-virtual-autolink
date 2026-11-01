@@ -654,7 +654,10 @@ export default class LinkerPlugin extends Plugin {
                         const linkTo = editor.offsetToPos(link.to);
                         return this.isPosWithinRange(linkFrom, linkTo, from, to);
                     })
-                    .sort((a, b) => a.from - b.from);
+                    .sort((a, b) => a.from - b.from || a.to - b.to)
+                    // CodeMirror can split one link around existing formatting.
+                    .filter((link, index, links) => index === 0 ||
+                        link.from !== links[index - 1].from || link.to !== links[index - 1].to);
 
                 if (virtualLinks.length === 0) return;
 
