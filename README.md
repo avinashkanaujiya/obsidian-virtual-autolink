@@ -191,4 +191,4 @@ TypeScript explicitly declares DOM and ES2019 APIs, including `Object.fromEntrie
 
 ## License
 
-Licensed under [Apache License 2.0](LICENSE). Original copyright: 2024 Valentin Schröter.
+Licensed under [Apache License 2.0](LICENSE). Original copyright: 2024 Valentin Schröter; the original attribution and license notice are preserved in [NOTICE](NOTICE).
