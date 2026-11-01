@@ -180,3 +180,7 @@ Checks are local-only for now. Repo `AGENTS.md` instructs coding agents to run a
 Automated checks do not replace smoke-testing changed behavior in an isolated Obsidian vault. They also do not query the registry for SDK updates or run a dependency-security audit. The SDK is pinned to Obsidian 1.14.4; changes to that target must keep `manifest.json`, `versions.json`, and the lockfile aligned.
 
 TypeScript explicitly declares DOM and ES2019 APIs, including `Object.fromEntries`; this avoids depending on newer API types accidentally supplied by development dependencies. Production JavaScript bundling still targets ES2018 syntax. Declaring API types does not add runtime polyfills.
+
+## License
+
+Licensed under [Apache License 2.0](LICENSE). Original copyright: 2024 Valentin Schröter.
